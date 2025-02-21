@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer for BitNodeUI System Metrics Service
+
+[Timer]
+OnBootSec=30sec
+OnUnitActiveSec=10sec
+Unit=bitnode-metrics.service
+AccuracySec=1s
+
+[Install]
+WantedBy=multi-user.target
