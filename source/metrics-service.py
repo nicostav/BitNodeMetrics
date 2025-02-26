@@ -1,61 +1,52 @@
 # All Imports
 import os
-import psutil
 import sqlite3
+from pathlib import Path
+import psutil
+from contextlib import closing
 
-# db
-## Initialize connection db
-con = sqlite3.connect("metrics.db")
-cur = con.cursor()
 
 ## Prepare db
-### Create Table
-cur.execute(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='system_metrics';"
-)
-table_exists = cur.fetchone()
-if None == table_exists:
-    cur.execute(
-        "CREATE TABLE system_metrics("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-        "timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
-        "cpu_percent REAL, "
-        "disk_full_total INT, "
-        "disk_full_used INT, "
-        "disk_full_free INT, "
-        "disk_full_percent REAL, "
-        "disk_folder_used INT, "
-        "memory_total INT, "
-        "memory_used INT, "
-        "memory_free INT, "
-        "memory_percent REAL "
-        ")"
+def prepare_db(cursor):
+    ### Create Table
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='system_metrics';"
     )
-else:
-    pass
+    table_exists = cursor.fetchone()
+    if table_exists is None:
+        cursor.execute(
+            "CREATE TABLE system_metrics("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "
+            "cpu_percent REAL, "
+            "disk_full_total INT, "
+            "disk_full_used INT, "
+            "disk_full_free INT, "
+            "disk_full_percent REAL, "
+            "disk_folder_used INT, "
+            "memory_total INT, "
+            "memory_used INT, "
+            "memory_free INT, "
+            "memory_percent REAL "
+            ")"
+        )
 
-### Create Index
-cur.execute(
-    "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_timestamp';"
-)
-index_exists = cur.fetchone()
-if None == index_exists:
-    cur.execute("CREATE INDEX idx_timestamp ON system_metrics(timestamp)")
-else:
-    pass
+    ### Create Index
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_timestamp';"
+    )
+    index_exists = cursor.fetchone()
+    if None == index_exists:
+        cursor.execute("CREATE INDEX idx_timestamp ON system_metrics(timestamp)")
 
 
 # Get the recursive size of a folder
 def get_folder_size(folder_path):
-    total_size = 0
-
-    # Walk trough folder and subfolders
-    for dirpath, dirnames, filenames in os.walk(folder_path):
-        for file in filenames:
-            file_path = os.path.join(dirpath, file)
-            # Add to total size
-            total_size += os.path.getsize(file_path)
-    return total_size
+    return sum(
+        file.stat().st_size
+        for file in Path(folder_path).rglob('*')
+        if file.is_file()
+    )
 
 
 # Measure all system metrics sent to db
@@ -95,8 +86,8 @@ def measure_system_metrics(folder_location):
 
 
 # Write system metrics into db
-def write_system_metrics(system_measures_to_write):
-    cur.execute(
+def write_system_metrics(cursor, system_measures_to_write):
+    cursor.execute(
         "INSERT INTO system_metrics("
         "cpu_percent, "
         "disk_full_total, "
@@ -122,12 +113,12 @@ def write_system_metrics(system_measures_to_write):
             system_measures_to_write[9],
         ),
     )
-    cur.close()
-    con.commit()
-    con.close()
 
 
 # Main
 if __name__ == "__main__":
-    measures = measure_system_metrics("/data")
-    write_system_metrics(measures)
+    measures = measure_system_metrics("/home/coder/Dokumente")
+    with sqlite3.connect("metrics.db") as conn:
+        with closing(conn.cursor()) as cur:
+            prepare_db(cur)
+            write_system_metrics(cur, measures)
